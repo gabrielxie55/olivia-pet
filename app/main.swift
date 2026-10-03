@@ -9,6 +9,11 @@ import ImageIO
 
 let fps = 30.0
 let debug = CommandLine.arguments.contains("--debug")
+
+// 作者署名：按钮条右下角的小水印、第一次打开时的招呼、右键菜单第一行都用这里
+let authorName = "盖比Gabe"
+/// 点署名打开的地方：小红书主页链接（没有的话先用小红书搜索昵称）
+let authorURL = URL(string: "https://www.xiaohongshu.com/search_result?keyword=" + authorName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)!
 /// 调试用：--volume 0.01 让测试时几乎听不见
 let volumeScale = CommandLine.arguments.firstIndex(of: "--volume").flatMap { Float(CommandLine.arguments[$0 + 1]) } ?? 1
 
@@ -142,8 +147,11 @@ enum Action: Int, CaseIterable {
 
 /// 头顶的一排按钮：彩色圆点 + 图标 + 小字，打开状态的按钮外面有一圈白边
 final class ButtonBar: NSView {
-    static let circle: CGFloat = 20, cell: CGFloat = 40, pad: CGFloat = 5, labelH: CGFloat = 11
-    static let size = NSSize(width: cell * CGFloat(Action.allCases.count) + pad * 2, height: pad + circle + 2 + labelH + pad - 1)
+    static let circle: CGFloat = 20, cell: CGFloat = 40, pad: CGFloat = 5, labelH: CGFloat = 11, creditH: CGFloat = 11
+    static let size = NSSize(width: cell * CGFloat(Action.allCases.count) + pad * 2, height: pad + circle + 2 + labelH + creditH + pad - 1)
+    /// 最下面一行小字署名，点一下打开作者主页
+    static let credit = "小红书 @\(authorName) 制作"
+    var onCredit: () -> Void = {}
 
     var isActive: (Action) -> Bool = { _ in false }
     var onPress: (Action) -> Void = { _ in }
@@ -157,7 +165,8 @@ final class ButtonBar: NSView {
     }
 
     func action(at p: NSPoint) -> Action? {
-        Action.allCases.first { NSRect(x: ButtonBar.pad + CGFloat($0.rawValue) * ButtonBar.cell, y: 0, width: ButtonBar.cell, height: bounds.height).contains(p) }
+        guard p.y >= ButtonBar.creditH else { return nil }      // 最下面一行是署名，不算按钮
+        return Action.allCases.first { NSRect(x: ButtonBar.pad + CGFloat($0.rawValue) * ButtonBar.cell, y: 0, width: ButtonBar.cell, height: bounds.height).contains(p) }
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -187,7 +196,16 @@ final class ButtonBar: NSView {
             let ts = text.size()
             text.draw(at: NSPoint(x: r.midX - ts.width / 2, y: r.minY - 2 - ts.height))
         }
+        // 右下角的署名小字：半透明，录屏的时候也会带上
+        let credit = NSAttributedString(string: ButtonBar.credit, attributes: [
+            .font: NSFont.systemFont(ofSize: 7.5, weight: .medium),
+            .foregroundColor: NSColor.white.withAlphaComponent(0.55),
+        ])
+        let cs = credit.size()
+        credit.draw(at: NSPoint(x: bounds.width - ButtonBar.pad - 4 - cs.width, y: 3))
     }
+
+    func creditRect() -> NSRect { NSRect(x: bounds.width * 0.55, y: 0, width: bounds.width * 0.45, height: ButtonBar.creditH + 2) }
 
     override func mouseDown(with e: NSEvent) {
         pressed = action(at: convert(e.locationInWindow, from: nil))
@@ -195,7 +213,9 @@ final class ButtonBar: NSView {
     }
 
     override func mouseUp(with e: NSEvent) {
-        let a = action(at: convert(e.locationInWindow, from: nil))
+        let p = convert(e.locationInWindow, from: nil)
+        if pressed == nil && creditRect().contains(p) { onCredit() }
+        let a = action(at: p)
         if let a, a == pressed { onPress(a) }
         pressed = nil
         needsDisplay = true
@@ -459,6 +479,7 @@ final class Pet: NSObject {
         view.layer!.addSublayer(idleLayer)
         bar.isActive = { [unowned self] in self.isActive($0) }
         bar.onPress = { [unowned self] in self.trigger($0) }
+        bar.onCredit = { NSWorkspace.shared.open(authorURL) }
         view.addSubview(bar)
         singButton.onPress = { [unowned self] in self.play(.vmalive); if debug { self.log("按下「唱 Good 4 U」") } }
         view.addSubview(singButton)
@@ -479,6 +500,13 @@ final class Pet: NSObject {
         window.orderFrontRegardless()
         fx.orderFrontRegardless()
         scheduleAutoScene()
+        // 第一次打开：自我介绍一下是谁做的（只说一次）
+        if !d.bool(forKey: "greeted") {
+            d.set(true, forKey: "greeted")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                self?.say("我是小红书 @\(authorName) 做的桌宠～\n关注他解锁更多歌手桌宠", force: true, seconds: 6)
+            }
+        }
 
         let timer = Timer(timeInterval: 1.0 / 60, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
         RunLoop.main.add(timer, forMode: .common)
@@ -741,7 +769,7 @@ final class Pet: NSObject {
     var headTop: CGFloat { stickerSize.height * 0.55 }
 
     /// 头旁边冒一个白色对话框，2 秒多后消失；force 为 false 时 3 秒内只说一句，免得太吵
-    func say(_ text: String, force: Bool = false) {
+    func say(_ text: String, force: Bool = false, seconds: Double = 2.4) {
         let now = CACurrentMediaTime()
         guard force || now - lastSay > 3, playing == nil else { return }
         lastSay = now
@@ -755,7 +783,7 @@ final class Pet: NSObject {
         pop.values = [0.5, 1.08, 1]
         pop.duration = 0.25
         l.add(pop, forKey: "pop")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
             if self?.bubble?.layer === l { self?.bubble = nil }
             CATransaction.begin()
             CATransaction.setCompletionBlock { l.removeFromSuperlayer() }
@@ -1977,6 +2005,10 @@ final class Pet: NSObject {
 
     func showMenu(_ e: NSEvent, in v: NSView) {
         let menu = NSMenu()
+        let credit = NSMenuItem(title: "制作：小红书 @\(authorName)", action: #selector(openAuthor), keyEquivalent: "")
+        credit.target = self
+        menu.addItem(credit)
+        menu.addItem(.separator())
         let backdropMenu = NSMenu()
         for (i, title) in Pet.backdrops.enumerated() {
             let item = NSMenuItem(title: title, action: #selector(setBackdrop(_:)), keyEquivalent: "")
@@ -2025,6 +2057,10 @@ final class Pet: NSObject {
         quit.target = NSApp
         menu.addItem(quit)
         NSMenu.popUpContextMenu(menu, with: e, for: v)
+    }
+
+    @objc func openAuthor() {
+        NSWorkspace.shared.open(authorURL)
     }
 
     @objc func toggleGravity() {

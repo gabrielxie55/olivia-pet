@@ -4,6 +4,8 @@
 
 ![Olivia 桌宠](docs/preview.png)
 
+作者：Gabriel Xie（小红书 **@盖比Gabe**，关注他看更多歌手桌宠）
+
 > 粉丝向的非官方作品，与 Olivia Rodrigo 本人及其团队、唱片公司没有任何关系
 
 ## 按钮

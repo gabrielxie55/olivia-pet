@@ -1,0 +1,10 @@
+# 打包产物：app 和下载包放在 GitHub Releases，不进仓库
+build/
+
+# 原视频、原图：别人的作品，仓库里只放处理好的素材
+source/
+
+# 本地工具配置
+.claude/
+
+.DS_Store

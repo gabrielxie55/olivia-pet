@@ -12,8 +12,8 @@ let debug = CommandLine.arguments.contains("--debug")
 
 // 作者署名：按钮条右下角的小水印、第一次打开时的招呼、右键菜单第一行都用这里
 let authorName = "盖比Gabe"
-/// 点署名打开的地方：小红书主页链接（没有的话先用小红书搜索昵称）
-let authorURL = URL(string: "https://www.xiaohongshu.com/search_result?keyword=" + authorName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)!
+/// 作者的小红书主页：只有右键菜单第一行能点开，别的地方只显示文字，不放链接
+let authorURL = URL(string: "https://www.xiaohongshu.com/user/profile/5e30224d0000000001002b1b")!
 /// 调试用：--volume 0.01 让测试时几乎听不见
 let volumeScale = CommandLine.arguments.firstIndex(of: "--volume").flatMap { Float(CommandLine.arguments[$0 + 1]) } ?? 1
 
@@ -149,9 +149,8 @@ enum Action: Int, CaseIterable {
 final class ButtonBar: NSView {
     static let circle: CGFloat = 20, cell: CGFloat = 40, pad: CGFloat = 5, labelH: CGFloat = 11, creditH: CGFloat = 11
     static let size = NSSize(width: cell * CGFloat(Action.allCases.count) + pad * 2, height: pad + circle + 2 + labelH + creditH + pad - 1)
-    /// 最下面一行小字署名，点一下打开作者主页
+    /// 最下面一行小字署名（只是文字，点了不跳转）
     static let credit = "小红书 @\(authorName) 制作"
-    var onCredit: () -> Void = {}
 
     var isActive: (Action) -> Bool = { _ in false }
     var onPress: (Action) -> Void = { _ in }
@@ -205,7 +204,6 @@ final class ButtonBar: NSView {
         credit.draw(at: NSPoint(x: bounds.width - ButtonBar.pad - 4 - cs.width, y: 3))
     }
 
-    func creditRect() -> NSRect { NSRect(x: bounds.width * 0.55, y: 0, width: bounds.width * 0.45, height: ButtonBar.creditH + 2) }
 
     override func mouseDown(with e: NSEvent) {
         pressed = action(at: convert(e.locationInWindow, from: nil))
@@ -213,9 +211,7 @@ final class ButtonBar: NSView {
     }
 
     override func mouseUp(with e: NSEvent) {
-        let p = convert(e.locationInWindow, from: nil)
-        if pressed == nil && creditRect().contains(p) { onCredit() }
-        let a = action(at: p)
+        let a = action(at: convert(e.locationInWindow, from: nil))
         if let a, a == pressed { onPress(a) }
         pressed = nil
         needsDisplay = true
@@ -479,7 +475,6 @@ final class Pet: NSObject {
         view.layer!.addSublayer(idleLayer)
         bar.isActive = { [unowned self] in self.isActive($0) }
         bar.onPress = { [unowned self] in self.trigger($0) }
-        bar.onCredit = { NSWorkspace.shared.open(authorURL) }
         view.addSubview(bar)
         singButton.onPress = { [unowned self] in self.play(.vmalive); if debug { self.log("按下「唱 Good 4 U」") } }
         view.addSubview(singButton)
